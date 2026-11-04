@@ -60,7 +60,13 @@
             method="post"
             enctype="multipart/form-data"
           >
-            <label class="field-label" for="train-image"
+            <label class="field-label" for="train-source">Training source</label>
+            <select id="train-source" class="mode-select">
+              <option value="camera">Phone camera</option>
+              <option value="upload">Upload from phone file/gallery</option>
+            </select>
+
+            <label class="field-label" for="train-image" id="train-image-label"
               >Photo from phone camera</label
             >
             <input
@@ -193,9 +199,31 @@
       const liveResult = document.getElementById("live-result");
       const startCameraButton = document.getElementById("start-camera");
       const captureLiveButton = document.getElementById("capture-live");
+      const trainSourceSelect = document.getElementById("train-source");
+      const trainImageInput = document.getElementById("train-image");
+      const trainImageLabel = document.getElementById("train-image-label");
       let cameraStream = null;
       let liveDetectTimer = null;
       let detecting = false;
+
+      function updateTrainSource() {
+        const source = trainSourceSelect ? trainSourceSelect.value : "camera";
+        if (!trainImageInput) return;
+
+        if (source === "camera") {
+          trainImageInput.setAttribute("capture", "environment");
+          trainImageInput.removeAttribute("multiple");
+          if (trainImageLabel) {
+            trainImageLabel.textContent = "Photo from phone camera";
+          }
+        } else {
+          trainImageInput.removeAttribute("capture");
+          trainImageInput.removeAttribute("multiple");
+          if (trainImageLabel) {
+            trainImageLabel.textContent = "Upload photo from phone file/gallery";
+          }
+        }
+      }
 
       function updateMode() {
         const selectedMode = modeSelect.value;
@@ -311,6 +339,11 @@
             "Camera access was blocked. Allow camera permission and try again.",
           );
         }
+      }
+
+      if (trainSourceSelect) {
+        trainSourceSelect.addEventListener("change", updateTrainSource);
+        updateTrainSource();
       }
 
       if (modeSelect) {
