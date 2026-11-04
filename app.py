@@ -3,6 +3,7 @@ import json
 import math
 import os
 import re
+import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -27,25 +28,107 @@ app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 TRAINING_DIR = DATA_DIR / "training"
-PALETTE_PATH = DATA_DIR / "learned_palette.json"
+DB_PATH = DATA_DIR / "yarn_detector.db"
 
 DATA_DIR.mkdir(exist_ok=True)
 TRAINING_DIR.mkdir(exist_ok=True)
 
-if not PALETTE_PATH.exists():
-    PALETTE_PATH.write_text("[]", encoding="utf-8")
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS yarn_samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            label TEXT NOT NULL,
+            rgb_r INTEGER NOT NULL,
+            rgb_g INTEGER NOT NULL,
+            rgb_b INTEGER NOT NULL,
+            hex TEXT NOT NULL,
+            source TEXT,
+            created_at TEXT NOT NULL,
+            gemini_summary TEXT
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+init_db()
+
+
+def add_yarn_sample(label, rgb_tuple, source, gemini_summary):
+    r, g, b = rgb_tuple
+    created_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        """
+        INSERT INTO yarn_samples (label, rgb_r, rgb_g, rgb_b, hex, source, created_at, gemini_summary)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (label, r, g, b, rgb_to_hex((r, g, b)), source, created_at, gemini_summary),
+    )
+    conn.commit()
+    conn.close()
+    return {
+        "label": label,
+        "rgb": [r, g, b],
+        "hex": rgb_to_hex((r, g, b)),
+        "source": source,
+        "created_at": created_at,
+        "gemini_summary": gemini_summary,
+    }
 
 
 def load_palette():
-    try:
-        data = json.loads(PALETTE_PATH.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError):
-        return []
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """
+        SELECT label, rgb_r, rgb_g, rgb_b, hex, source, created_at, gemini_summary
+        FROM yarn_samples
+        ORDER BY created_at DESC
+        """
+    ).fetchall()
+    conn.close()
+
+    palette = []
+    for row in rows:
+        palette.append({
+            "label": row["label"],
+            "rgb": [row["rgb_r"], row["rgb_g"], row["rgb_b"]],
+            "hex": row["hex"],
+            "source": row["source"],
+            "created_at": row["created_at"],
+            "gemini_summary": row["gemini_summary"],
+        })
+    return palette
 
 
 def save_palette(entries):
-    PALETTE_PATH.write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM yarn_samples")
+    for item in entries:
+        rgb = item.get("rgb", [0, 0, 0])
+        conn.execute(
+            """
+            INSERT INTO yarn_samples (label, rgb_r, rgb_g, rgb_b, hex, source, created_at, gemini_summary)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                item.get("label", "Unknown"),
+                int(rgb[0]),
+                int(rgb[1]),
+                int(rgb[2]),
+                item.get("hex", rgb_to_hex(tuple(rgb))),
+                item.get("source", "manual"),
+                item.get("created_at", datetime.utcnow().isoformat(timespec="seconds") + "Z"),
+                item.get("gemini_summary", "unknown"),
+            ),
+        )
+    conn.commit()
+    conn.close()
 
 
 def rgb_to_hex(rgb):
@@ -213,16 +296,12 @@ def train():
     with saved_path.open("wb") as out_file:
         out_file.write(image_bytes)
 
-    palette = load_palette()
-    palette.append({
-        "label": label,
-        "rgb": list(dominant_rgb),
-        "hex": rgb_to_hex(dominant_rgb),
-        "source": saved_path.name,
-        "created_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "gemini_summary": gemini.get("dominant_color", "unknown"),
-    })
-    save_palette(palette)
+    add_yarn_sample(
+        label=label,
+        rgb_tuple=dominant_rgb,
+        source=saved_path.name,
+        gemini_summary=gemini.get("dominant_color", "unknown"),
+    )
 
     flash(f"Saved {label} in your yarn library. Dominant RGB: {rgb_to_hex(dominant_rgb)}")
     return redirect(url_for("index"))
