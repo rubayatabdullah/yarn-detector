@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Yarn Color Lab</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">AI yarn detector</p>
+          <h1>Yarn Detector</h1>
+        </div>
+      </header>
+
+      {% with messages = get_flashed_messages() %} {% if messages %}
+      <div class="flash-box">
+        {% for message in messages %}
+        <p>{{ message }}</p>
+        {% endfor %}
+      </div>
+      {% endif %} {% endwith %}
+
+      <section class="card mode-card">
+        <label class="field-label" for="mode-select">Choose action</label>
+        <select id="mode-select" class="mode-select">
+          <option value="identify">Detect yarn</option>
+          <option value="live">Live camera detect</option>
+          <option value="train">Add yarn sample</option>
+        </select>
+      </section>
+
+      <main class="grid">
+        <section class="card panel" id="live-panel" hidden>
+          <h2>Live camera detect</h2>
+          <div class="camera-box">
+            <video id="live-video" autoplay playsinline muted></video>
+          </div>
+
+          <div class="button-row">
+            <button type="button" id="start-camera">Start camera</button>
+            <button type="button" id="capture-live" class="secondary-btn">
+              Detect now
+            </button>
+          </div>
+
+          <div id="live-result" class="live-result">
+            Camera is off. Start it to detect yarn in real time.
+          </div>
+        </section>
+        <section class="card panel" id="train-panel" hidden>
+          <h2>Add yarn sample</h2>
+          <form
+            action="{{ url_for('train') }}"
+            method="post"
+            enctype="multipart/form-data"
+          >
+            <label class="field-label" for="train-image"
+              >Photo from phone camera</label
+            >
+            <input
+              id="train-image"
+              type="file"
+              name="image"
+              accept="image/*"
+              capture="environment"
+              required
+            />
+            <div class="preview-box hidden" id="train-preview-box">
+              <img id="train-preview" alt="Train preview" />
+            </div>
+
+            <label class="field-label" for="color-name">Yarn name</label>
+            <input
+              id="color-name"
+              type="text"
+              name="label"
+              placeholder="Example: Navy, Olive, Red"
+              required
+            />
+
+            <button type="submit">Save yarn</button>
+          </form>
+        </section>
+
+        <section class="card panel" id="identify-panel">
+          <h2>Detect yarn</h2>
+          <form
+            action="{{ url_for('predict') }}"
+            method="post"
+            enctype="multipart/form-data"
+          >
+            <label class="field-label" for="predict-image">Upload image</label>
+            <input
+              id="predict-image"
+              type="file"
+              name="image"
+              accept="image/*"
+              capture="environment"
+              required
+            />
+            <div class="preview-box hidden" id="predict-preview-box">
+              <img id="predict-preview" alt="Predict preview" />
+            </div>
+
+            <button type="submit">Detect yarn</button>
+          </form>
+        </section>
+      </main>
+
+      {% if result %}
+      <section class="card result-card">
+        <h2>Latest detection</h2>
+        <div class="result-row">
+          <div>
+            <p class="stat-label">Current yarn sample</p>
+            <p class="stat-value">{{ result.current_hex }}</p>
+            <div
+              class="color-swatch"
+              style="background: {{ result.current_hex }};"
+            ></div>
+          </div>
+
+          <div>
+            <p class="stat-label">Nearest saved yarn</p>
+            <p class="stat-value">{{ result.matched_label }}</p>
+            <div
+              class="color-swatch"
+              style="background: {{ result.matched_hex }};"
+            ></div>
+          </div>
+        </div>
+
+        <p><strong>Match score:</strong> {{ result.match_score }}%</p>
+        {% if result.distance %}
+        <p><strong>Distance:</strong> {{ result.distance }}</p>
+        {% endif %} {% if result.gemini.enabled %}
+        <p>
+          <strong>Gemini says:</strong> {{ result.gemini.dominant_color }}
+          (confidence {{ result.gemini.confidence }})
+        </p>
+        <p><strong>Notes:</strong> {{ result.gemini.notes }}</p>
+        {% else %}
+        <p><strong>Gemini:</strong> {{ result.gemini.notes }}</p>
+        {% endif %}
+      </section>
+      {% endif %}
+
+      <section class="card memory-card">
+        <h2>Memory</h2>
+        <p><strong>Stored yarn samples:</strong> {{ palette|length }}</p>
+        <p>
+          This app remembers the yarn samples you save locally in
+          <strong>data/learned_palette.json</strong>, and keeps the training
+          photos in <strong>data/training</strong>.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Saved yarn library</h2>
+        {% if palette %}
+        <div class="library-grid">
+          {% for item in palette %}
+          <div class="library-card">
+            <div
+              class="library-swatch"
+              style="background: {{ item.hex }};"
+            ></div>
+            <div class="library-meta">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.hex }}</span>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p>No yarn samples saved yet. Add your first sample.</p>
+        {% endif %}
+      </section>
+    </div>
+
+    <script>
+      const modeSelect = document.getElementById("mode-select");
+      const trainPanel = document.getElementById("train-panel");
+      const identifyPanel = document.getElementById("identify-panel");
+      const livePanel = document.getElementById("live-panel");
+      const liveVideo = document.getElementById("live-video");
+      const liveResult = document.getElementById("live-result");
+      const startCameraButton = document.getElementById("start-camera");
+      const captureLiveButton = document.getElementById("capture-live");
+      let cameraStream = null;
+      let liveDetectTimer = null;
+      let detecting = false;
+
+      function updateMode() {
+        const selectedMode = modeSelect.value;
+        const isTrain = selectedMode === "train";
+        const isLive = selectedMode === "live";
+
+        trainPanel.hidden = !isTrain;
+        identifyPanel.hidden = isTrain || isLive;
+        livePanel.hidden = !isLive;
+
+        if (isLive && !cameraStream) {
+          showLiveResult("Camera is ready to start.");
+        }
+      }
+
+      function showLiveResult(text) {
+        if (liveResult) {
+          liveResult.textContent = text;
+        }
+      }
+
+      function previewSelectedImage(inputId, previewId, boxId) {
+        const input = document.getElementById(inputId);
+        const preview = document.getElementById(previewId);
+        const box = document.getElementById(boxId);
+
+        if (!input || !preview || !box) return;
+
+        input.addEventListener("change", function () {
+          const file = this.files && this.files[0];
+          if (!file) {
+            box.classList.add("hidden");
+            preview.src = "";
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.onload = function (event) {
+            preview.src = event.target.result;
+            box.classList.remove("hidden");
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      async function captureAndDetect() {
+        if (!liveVideo || !liveVideo.videoWidth || !liveVideo.videoHeight) {
+          showLiveResult("Camera is not ready yet.");
+          return;
+        }
+
+        if (detecting) return;
+        detecting = true;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = liveVideo.videoWidth;
+        canvas.height = liveVideo.videoHeight;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
+
+        const blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", 0.9),
+        );
+
+        const formData = new FormData();
+        formData.append("image", blob, "live-frame.jpg");
+
+        try {
+          const response = await fetch("/api/detect", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (!response.ok) {
+            throw new Error("Detection request failed");
+          }
+
+          const result = await response.json();
+          showLiveResult(
+            `Nearest yarn: ${result.matched_label} (${result.match_score}% match) | Gemini: ${result.gemini.dominant_color}`,
+          );
+        } catch (error) {
+          showLiveResult("Live detection failed. Please try again.");
+        } finally {
+          detecting = false;
+        }
+      }
+
+      async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          showLiveResult("This browser does not support camera access.");
+          return;
+        }
+
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: "environment" },
+            audio: false,
+          });
+
+          liveVideo.srcObject = cameraStream;
+          liveVideo.play();
+          showLiveResult("Camera is live. Press Detect now.");
+
+          if (liveDetectTimer) clearInterval(liveDetectTimer);
+          liveDetectTimer = setInterval(() => {
+            if (modeSelect && modeSelect.value === "live") {
+              captureAndDetect();
+            }
+          }, 2200);
+        } catch (error) {
+          showLiveResult(
+            "Camera access was blocked. Allow camera permission and try again.",
+          );
+        }
+      }
+
+      if (modeSelect) {
+        modeSelect.addEventListener("change", updateMode);
+        updateMode();
+      }
+
+      if (startCameraButton) {
+        startCameraButton.addEventListener("click", startCamera);
+      }
+
+      if (captureLiveButton) {
+        captureLiveButton.addEventListener("click", captureAndDetect);
+      }
+
+      previewSelectedImage("train-image", "train-preview", "train-preview-box");
+      previewSelectedImage(
+        "predict-image",
+        "predict-preview",
+        "predict-preview-box",
+      );
+    </script>
+  </body>
+</html>
