@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Yarn Color Lab</title>
+    <title>Yarn Thickness Checker</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='styles.css') }}"
@@ -13,8 +13,8 @@
     <div class="page-shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">AI yarn detector</p>
-          <h1>Yarn Detector</h1>
+          <p class="eyebrow">Thickness and quality check</p>
+          <h1>Yarn Thickness Checker</h1>
         </div>
       </header>
 
@@ -29,15 +29,15 @@
       <section class="card mode-card">
         <label class="field-label" for="mode-select">Choose action</label>
         <select id="mode-select" class="mode-select">
-          <option value="identify">Detect yarn</option>
-          <option value="live">Live camera detect</option>
+          <option value="identify">Check yarn thickness</option>
+          <option value="live">Live camera check</option>
           <option value="train">Add yarn sample</option>
         </select>
       </section>
 
       <main class="grid">
         <section class="card panel" id="live-panel" hidden>
-          <h2>Live camera detect</h2>
+          <h2>Live camera check</h2>
           <div class="camera-box">
             <video id="live-video" autoplay playsinline muted></video>
           </div>
@@ -60,7 +60,9 @@
             method="post"
             enctype="multipart/form-data"
           >
-            <label class="field-label" for="train-source">Training source</label>
+            <label class="field-label" for="train-source"
+              >Training source</label
+            >
             <select id="train-source" class="mode-select">
               <option value="camera">Phone camera</option>
               <option value="upload">Upload from phone file/gallery</option>
@@ -81,21 +83,12 @@
               <img id="train-preview" alt="Train preview" />
             </div>
 
-            <label class="field-label" for="color-name">Yarn name</label>
-            <input
-              id="color-name"
-              type="text"
-              name="label"
-              placeholder="Example: Navy, Olive, Red"
-              required
-            />
-
             <button type="submit">Save yarn</button>
           </form>
         </section>
 
         <section class="card panel" id="identify-panel">
-          <h2>Detect yarn</h2>
+          <h2>Check yarn thickness</h2>
           <form
             action="{{ url_for('predict') }}"
             method="post"
@@ -114,46 +107,30 @@
               <img id="predict-preview" alt="Predict preview" />
             </div>
 
-            <button type="submit">Detect yarn</button>
+            <button type="submit">Check thickness</button>
           </form>
         </section>
       </main>
 
       {% if result %}
       <section class="card result-card">
-        <h2>Latest detection</h2>
-        <div class="result-row">
-          <div>
-            <p class="stat-label">Current yarn sample</p>
-            <p class="stat-value">{{ result.current_hex }}</p>
-            <div
-              class="color-swatch"
-              style="background: {{ result.current_hex }};"
-            ></div>
-          </div>
-
-          <div>
-            <p class="stat-label">Nearest saved yarn</p>
-            <p class="stat-value">{{ result.matched_label }}</p>
-            <div
-              class="color-swatch"
-              style="background: {{ result.matched_hex }};"
-            ></div>
-          </div>
-        </div>
-
-        <p><strong>Match score:</strong> {{ result.match_score }}%</p>
-        {% if result.distance %}
-        <p><strong>Distance:</strong> {{ result.distance }}</p>
-        {% endif %} {% if result.gemini.enabled %}
+        <h2>Thickness result</h2>
+        <p><strong>Status:</strong> {{ result.status|title }}</p>
         <p>
-          <strong>Gemini says:</strong> {{ result.gemini.dominant_color }}
-          (confidence {{ result.gemini.confidence }})
+          <strong>Measured thickness:</strong> {{ result.measured_thickness_px
+          }} px
         </p>
-        <p><strong>Notes:</strong> {{ result.gemini.notes }}</p>
-        {% else %}
-        <p><strong>Gemini:</strong> {{ result.gemini.notes }}</p>
+        {% if result.reference_label %}
+        <p><strong>Reference sample:</strong> {{ result.reference_label }}</p>
+        <p>
+          <strong>Reference thickness:</strong> {{ result.reference_thickness_px
+          }} px
+        </p>
+        {% endif %} {% if result.difference_px is not none %}
+        <p><strong>Difference:</strong> {{ result.difference_px }} px</p>
         {% endif %}
+        <p><strong>Match score:</strong> {{ result.match_score }}%</p>
+        <p><strong>Message:</strong> {{ result.message }}</p>
       </section>
       {% endif %}
 
@@ -161,9 +138,8 @@
         <h2>Memory</h2>
         <p><strong>Stored yarn samples:</strong> {{ palette|length }}</p>
         <p>
-          This app remembers the yarn samples you save in a SQLite database
-          table, and keeps the training photos in
-          <strong>data/training</strong>.
+          This app stores yarn thickness references in a SQLite database table,
+          and keeps the training photos in <strong>data/training</strong>.
         </p>
       </section>
 
@@ -173,19 +149,16 @@
         <div class="library-grid">
           {% for item in palette %}
           <div class="library-card">
-            <div
-              class="library-swatch"
-              style="background: {{ item.hex }};"
-            ></div>
+            <div class="library-swatch" style="background: #d8d8d8"></div>
             <div class="library-meta">
               <strong>{{ item.label }}</strong>
-              <span>{{ item.hex }}</span>
+              <span>{{ item.thickness_px }} px</span>
             </div>
           </div>
           {% endfor %}
         </div>
         {% else %}
-        <p>No yarn samples saved yet. Add your first sample.</p>
+        <p>No yarn thickness samples saved yet. Add your first sample.</p>
         {% endif %}
       </section>
     </div>
@@ -220,7 +193,8 @@
           trainImageInput.removeAttribute("capture");
           trainImageInput.removeAttribute("multiple");
           if (trainImageLabel) {
-            trainImageLabel.textContent = "Upload photo from phone file/gallery";
+            trainImageLabel.textContent =
+              "Upload photo from phone file/gallery";
           }
         }
       }
@@ -302,8 +276,10 @@
           }
 
           const result = await response.json();
+          const statusText =
+            result.status === "acceptable" ? "ACCEPTABLE" : "NOT ACCEPTABLE";
           showLiveResult(
-            `Nearest yarn: ${result.matched_label} (${result.match_score}% match) | Gemini: ${result.gemini.dominant_color}`,
+            `Status: ${statusText} | Measured: ${result.measured_thickness_px}px | Reference: ${result.reference_label} (${result.reference_thickness_px}px)`,
           );
         } catch (error) {
           showLiveResult("Live detection failed. Please try again.");
