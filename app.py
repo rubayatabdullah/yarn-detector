@@ -116,6 +116,18 @@ def save_palette(entries):
     conn.close()
 
 
+def clear_memory():
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM yarn_samples")
+    conn.commit()
+    conn.close()
+
+    if TRAINING_DIR.exists():
+        for file_path in TRAINING_DIR.iterdir():
+            if file_path.is_file():
+                file_path.unlink(missing_ok=True)
+
+
 def normalize_label(label):
     text = re.sub(r"\s+", " ", label or "").strip()
     return text.title() if text else "Reference"
@@ -281,6 +293,13 @@ def predict():
     palette = load_palette()
     result = create_prediction_result(image_file.read(), image_file.filename)
     return render_template("index.html", palette=palette, result=result)
+
+
+@app.route("/clear-memory", methods=["POST"])
+def clear_memory_route():
+    clear_memory()
+    flash("Reference memory cleared.")
+    return redirect(url_for("index"))
 
 
 @app.route("/api/detect", methods=["POST"])

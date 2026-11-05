@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Yarn Thickness Checker</title>
+    <title>Weft Yarn Analyzer</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='styles.css') }}"
@@ -13,8 +13,8 @@
     <div class="page-shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">Thickness and quality check</p>
-          <h1>Yarn Thickness Checker</h1>
+          <p class="eyebrow">Yarn quality and comparison</p>
+          <h1>Weft Yarn Analyzer</h1>
         </div>
       </header>
 
@@ -29,15 +29,22 @@
       <section class="card mode-card">
         <label class="field-label" for="mode-select">Choose action</label>
         <select id="mode-select" class="mode-select">
-          <option value="identify">Check yarn thickness</option>
-          <option value="live">Live camera check</option>
-          <option value="train">Add yarn sample</option>
+          <option value="identify">Analyze yarn sample</option>
+          <option value="live">Live camera analysis</option>
+          <option value="train">Add yarn reference</option>
         </select>
       </section>
 
+      <div class="card memory-card">
+        <p>
+          <strong>Lab capture guide:</strong> keep the yarn straight, use a
+          fixed distance, and hold the phone steady for a consistent comparison.
+        </p>
+      </div>
+
       <main class="grid">
         <section class="card panel" id="live-panel" hidden>
-          <h2>Live camera check</h2>
+          <h2>Live camera analysis</h2>
           <div class="camera-box">
             <video id="live-video" autoplay playsinline muted></video>
           </div>
@@ -45,16 +52,16 @@
           <div class="button-row">
             <button type="button" id="start-camera">Start camera</button>
             <button type="button" id="capture-live" class="secondary-btn">
-              Detect now
+              Analyze now
             </button>
           </div>
 
           <div id="live-result" class="live-result">
-            Camera is off. Start it to detect yarn in real time.
+            Camera is off. Start it to analyze the yarn in real time.
           </div>
         </section>
         <section class="card panel" id="train-panel" hidden>
-          <h2>Add yarn sample</h2>
+          <h2>Add yarn reference</h2>
           <form
             action="{{ url_for('train') }}"
             method="post"
@@ -88,7 +95,7 @@
         </section>
 
         <section class="card panel" id="identify-panel">
-          <h2>Check yarn thickness</h2>
+          <h2>Analyze yarn sample</h2>
           <form
             action="{{ url_for('predict') }}"
             method="post"
@@ -107,29 +114,32 @@
               <img id="predict-preview" alt="Predict preview" />
             </div>
 
-            <button type="submit">Check thickness</button>
+            <button type="submit">Analyze yarn</button>
           </form>
         </section>
       </main>
 
       {% if result %}
       <section class="card result-card">
-        <h2>Thickness result</h2>
+        <h2>Analysis result</h2>
         <p><strong>Output:</strong> {{ result.status|title }}</p>
       </section>
       {% endif %}
 
       <section class="card memory-card">
-        <h2>Memory</h2>
-        <p><strong>Stored yarn samples:</strong> {{ palette|length }}</p>
+        <h2>Reference memory</h2>
+        <p><strong>Stored yarn references:</strong> {{ palette|length }}</p>
         <p>
-          This app stores yarn thickness references in a SQLite database table,
+          This app stores yarn comparison references in a SQLite database table,
           and keeps the training photos in <strong>data/training</strong>.
         </p>
+        <form action="{{ url_for('clear_memory_route') }}" method="post">
+          <button type="submit" class="secondary-btn">Clear memory</button>
+        </form>
       </section>
 
       <section class="card">
-        <h2>Saved yarn library</h2>
+        <h2>Saved yarn references</h2>
         {% if palette %}
         <div class="library-grid">
           {% for item in palette %}
@@ -143,7 +153,7 @@
           {% endfor %}
         </div>
         {% else %}
-        <p>No yarn thickness samples saved yet. Add your first sample.</p>
+        <p>No yarn references saved yet. Add your first reference.</p>
         {% endif %}
       </section>
     </div>

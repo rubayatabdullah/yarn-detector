@@ -1,29 +1,27 @@
-# Yarn Color Lab
+# Weft Yarn Analyzer
 
-A small mobile-friendly Flask app that learns yarn colors from photos you label and then matches new photos to your saved palette.
+A mobile-first Flask app for yarn acceptability checks in a lab environment. It stores reference yarn samples, measures yarn thickness from the image, and compares a new yarn sample against the saved reference using a ±15% tolerance window.
 
 ## Features
 
-- Upload images from a phone camera using the mobile capture input.
-- Save a photo with a color label such as Red, Olive, or Navy.
-- Learn the dominant color from each saved yarn sample.
-- Analyze new yarn photos with Gemini and compare the result against your saved colors.
-- Store your learned palette locally in the data folder.
+- Use the phone camera or upload a photo from the gallery.
+- Save a reference yarn sample with its measured width.
+- Compare a new yarn image against the saved reference.
+- Return only an acceptability result: ACCEPTABLE or NOT ACCEPTABLE.
+- Keep the result inline on the live camera page.
+- Store yarn references in SQLite and saved photos in `data/training`.
 
-## Setup
+## Local setup
 
 1. Open a terminal in this folder.
-2. Install dependencies:
+2. Create and activate a virtual environment.
+3. Install dependencies:
 
    `python -m pip install -r requirements.txt`
 
-3. Create a `.env` file from the example:
+4. Create a `.env` file:
 
-   `copy .env.example .env`
-
-4. Add your Gemini API key:
-
-   `GEMINI_API_KEY=your_key_here`
+   `SECRET_KEY=your-secret-key`
 
 5. Run the app:
 
@@ -31,8 +29,19 @@ A small mobile-friendly Flask app that learns yarn colors from photos you label 
 
 6. Open http://localhost:5000 in your browser.
 
-## Notes
+## Production deployment
 
-- The app saves learned samples in `data/learned_palette.json` and stores the image files under `data/training`.
-- The web upload input uses `capture="environment"` so it works well with phone cameras.
-- If the Gemini API key is missing, the app still offers the local color-matching logic with a warning message.
+This project is ready for Render or a similar Python host.
+
+Recommended settings:
+
+- start command: `gunicorn wsgi:app --bind 0.0.0.0:$PORT`
+- environment variables: `SECRET_KEY` and `PORT`
+- Python runtime: 3.12+
+
+## Lab-use tips
+
+- Keep the yarn straight and fully visible in frame.
+- Use a fixed phone distance for every sample.
+- Hold the camera steady and avoid glare.
+- Use the same lighting conditions for both reference and test yarns.
