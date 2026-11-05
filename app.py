@@ -214,18 +214,14 @@ def create_prediction_result(image_bytes, filename="sample.jpg"):
             "acceptable": False,
         }
 
-    tolerance = max(2.0, match["target"] * 0.12)
+    tolerance = max(2.0, match["target"] * 0.15)
     difference = abs(measured_thickness - match["target"])
     acceptable = difference <= tolerance
     score = max(0, min(100, int(100 - (difference / max(match["target"], 1.0)) * 100)))
 
     return {
         "status": "acceptable" if acceptable else "not acceptable",
-        "message": (
-            "acceptable"
-            if acceptable
-            else "not acceptable"
-        ),
+        "message": "acceptable" if acceptable else "not acceptable",
         "measured_thickness_px": round(measured_thickness, 2),
         "reference_label": match["label"],
         "reference_thickness_px": round(match["target"], 2),

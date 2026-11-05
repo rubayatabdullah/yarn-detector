@@ -115,22 +115,7 @@
       {% if result %}
       <section class="card result-card">
         <h2>Thickness result</h2>
-        <p><strong>Status:</strong> {{ result.status|title }}</p>
-        <p>
-          <strong>Measured thickness:</strong> {{ result.measured_thickness_px
-          }} px
-        </p>
-        {% if result.reference_label %}
-        <p><strong>Reference sample:</strong> {{ result.reference_label }}</p>
-        <p>
-          <strong>Reference thickness:</strong> {{ result.reference_thickness_px
-          }} px
-        </p>
-        {% endif %} {% if result.difference_px is not none %}
-        <p><strong>Difference:</strong> {{ result.difference_px }} px</p>
-        {% endif %}
-        <p><strong>Match score:</strong> {{ result.match_score }}%</p>
-        <p><strong>Message:</strong> {{ result.message }}</p>
+        <p><strong>Output:</strong> {{ result.status|title }}</p>
       </section>
       {% endif %}
 
@@ -278,9 +263,7 @@
           const result = await response.json();
           const statusText =
             result.status === "acceptable" ? "ACCEPTABLE" : "NOT ACCEPTABLE";
-          showLiveResult(
-            `Status: ${statusText} | Measured: ${result.measured_thickness_px}px | Reference: ${result.reference_label} (${result.reference_thickness_px}px)`,
-          );
+          showLiveResult(statusText);
         } catch (error) {
           showLiveResult("Live detection failed. Please try again.");
         } finally {
